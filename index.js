@@ -120,7 +120,7 @@ async function run() {
       res.send(assignments);
     });
 
-    // Protected assignment management endpoints (instructor only)
+    // assignment management
     app.post(
       "/assignments",
       verifyToken,
@@ -143,7 +143,7 @@ async function run() {
       }
     );
 
-    // Delete assignment endpoint (instructor only)
+    // Delete assignment endpoint 
     app.delete(
       "/assignments/:id",
       verifyToken,
@@ -176,7 +176,7 @@ async function run() {
       }
     );
 
-    // Update submission  - instructor only
+    // Update submission  
     app.patch(
       "/submissions/:id",
       verifyToken,
@@ -268,7 +268,7 @@ async function run() {
       }
     });
 
-    //user api
+    
     app.get("/users/:email", verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
