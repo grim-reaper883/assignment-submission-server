@@ -16,7 +16,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.gvwcrqp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -57,6 +57,19 @@ async function run() {
       }
     };
 
+    // Role-based middleware
+    const requireRole = (roles) => {
+      return (req, res, next) => {
+        if (!req.user || !req.user.role) {
+          return res.status(403).json({ message: "Role required" });
+        }
+        if (!roles.includes(req.user.role)) {
+          return res.status(403).json({ message: "Insufficient permissions" });
+        }
+        next();
+      };
+    };
+
     // JWT
     app.post("/jwt", async (req, res) => {
       try {
@@ -66,7 +79,7 @@ async function run() {
           return res.status(404).json({ message: "user not found" });
         }
         const token = jwt.sign(
-          { email: user.email, userId: user._id },
+          { email: user.email, userId: user._id, role: user.role },
           process.env.JWT_SECRET,
           { expiresIn: "1d" }
         );
@@ -76,7 +89,10 @@ async function run() {
           sameSite: "lax",
           path: "/",
         });
-        res.json({ message: "login successful" });
+        res.json({
+          message: "login successful",
+          user: { email: user.email, role: user.role, name: user.name },
+        });
       } catch (error) {
         console.error("error generating jwt", error);
         res.status(500).json({ message: "internal server error" });
@@ -104,11 +120,128 @@ async function run() {
       res.send(assignments);
     });
 
+    // Protected assignment management endpoints (instructor only)
+    app.post(
+      "/assignments",
+      verifyToken,
+      requireRole(["instructor"]),
+      async (req, res) => {
+        try {
+          const assignmentData = req.body;
+          assignmentData.createdAt = new Date();
+          assignmentData.createdBy = req.user.email;
+
+          const result = await assignmentCollection.insertOne(assignmentData);
+          res.status(201).json({
+            message: "Assignment created successfully",
+            assignmentId: result.insertedId,
+          });
+        } catch (error) {
+          console.error("Error creating assignment:", error);
+          res.status(500).json({ message: "internal server error" });
+        }
+      }
+    );
+
+    // Delete assignment endpoint (instructor only)
+    app.delete(
+      "/assignments/:id",
+      verifyToken,
+      requireRole(["instructor"]),
+      async (req, res) => {
+        try {
+          const assignmentId = req.params.id;
+
+          // Check if assignment exists
+          const assignment = await assignmentCollection.findOne({
+            _id: new ObjectId(assignmentId),
+          });
+          if (!assignment) {
+            return res.status(404).json({ message: "Assignment not found" });
+          }
+
+          const result = await assignmentCollection.deleteOne({
+            _id: new ObjectId(assignmentId),
+          });
+
+          if (result.deletedCount === 1) {
+            res.json({ message: "Assignment deleted successfully" });
+          } else {
+            res.status(500).json({ message: "Failed to delete assignment" });
+          }
+        } catch (error) {
+          console.error("Error deleting assignment:", error);
+          res.status(500).json({ message: "internal server error" });
+        }
+      }
+    );
+
+    // Update submission  - instructor only
+    app.patch(
+      "/submissions/:id",
+      verifyToken,
+      requireRole(["instructor"]),
+      async (req, res) => {
+        try {
+          const submissionId = req.params.id;
+          const { status, feedback } = req.body;
+
+          const updateDoc = {
+            $set: {
+              status,
+              feedback,
+              reviewedAt: new Date(),
+              reviewedBy: req.user.email,
+            },
+          };
+
+          const result = await submissionCollection.updateOne(
+            { _id: new ObjectId(submissionId) },
+            updateDoc
+          );
+
+          if (result.modifiedCount === 1) {
+            res.json({ message: "Submission reviewed successfully" });
+          } else {
+            res
+              .status(404)
+              .json({ message: "Submission not found or already reviewed" });
+          }
+        } catch (error) {
+          console.error("Error reviewing submission:", error);
+          res.status(500).json({ message: "Internal server error" });
+        }
+      }
+    );
+
     //submission api
     app.get("/submissions", async (req, res) => {
       const submissions = await submissionCollection.find().toArray();
       res.send(submissions);
     });
+
+    // Protected submission endpoints
+    app.post(
+      "/submissions",
+      verifyToken,
+      requireRole(["student"]),
+      async (req, res) => {
+        try {
+          const submissionData = req.body;
+          submissionData.submittedAt = new Date();
+          submissionData.submittedBy = req.user.email;
+
+          const result = await submissionCollection.insertOne(submissionData);
+          res.status(201).json({
+            message: "Submission created successfully",
+            submissionId: result.insertedId,
+          });
+        } catch (error) {
+          console.error("Error creating submission:", error);
+          res.status(500).json({ message: "internal server error" });
+        }
+      }
+    );
 
     //user api
     app.post("/users", async (req, res) => {
