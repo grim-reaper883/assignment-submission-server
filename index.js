@@ -35,8 +35,12 @@ async function run() {
 
     //collections
     const userCollection = client.db("applicationportal").collection("users");
-    const assignmentCollection = client.db("applicationportal").collection("assignments");
-    const submissionCollection = client.db("applicationportal").collection("submissions");
+    const assignmentCollection = client
+      .db("applicationportal")
+      .collection("assignments");
+    const submissionCollection = client
+      .db("applicationportal")
+      .collection("submissions");
 
     //middleware
     const verifyToken = async (req, res, next) => {
@@ -53,7 +57,7 @@ async function run() {
       }
     };
 
-    // JWT 
+    // JWT
     app.post("/jwt", async (req, res) => {
       try {
         const { email } = req.body;
@@ -68,8 +72,8 @@ async function run() {
         );
         res.cookie("accessToken", token, {
           httpOnly: true,
-          secure: false, 
-          sameSite: "lax", 
+          secure: false,
+          sameSite: "lax",
           path: "/",
         });
         res.json({ message: "login successful" });
@@ -79,13 +83,12 @@ async function run() {
       }
     });
 
-    
     app.post("/logout", (req, res) => {
       try {
         res.clearCookie("accessToken", {
           httpOnly: true,
-          secure: false, 
-          sameSite: "lax", 
+          secure: false,
+          sameSite: "lax",
           path: "/",
         });
         res.status(200).json({ message: "logged out successfully" });
@@ -95,19 +98,19 @@ async function run() {
       }
     });
 
-    //assignment api 
+    //assignment api
     app.get("/assignments", async (req, res) => {
       const assignments = await assignmentCollection.find().toArray();
       res.send(assignments);
     });
 
-    //submission api 
+    //submission api
     app.get("/submissions", async (req, res) => {
       const submissions = await submissionCollection.find().toArray();
       res.send(submissions);
     });
 
-    //user api 
+    //user api
     app.post("/users", async (req, res) => {
       try {
         const userData = req.body;
@@ -132,14 +135,14 @@ async function run() {
       }
     });
 
-    //user api 
+    //user api
     app.get("/users/:email", verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
         if (req.user.email !== email) {
           return res.status(403).json({ message: "Forbidden" });
         }
-        
+
         const user = await userCollection.findOne({ email });
         if (!user) {
           return res.status(404).json({ message: "User not found" });
@@ -153,7 +156,9 @@ async function run() {
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } catch (error) {
     console.error("Error connecting to MongoDB:", error);
   }
