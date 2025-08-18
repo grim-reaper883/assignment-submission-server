@@ -9,7 +9,7 @@ const port = process.env.PORT || 5000;
 //middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: "http://localhost:5173",
     credentials: true,
   })
 );
@@ -143,7 +143,7 @@ async function run() {
       }
     );
 
-    // Delete assignment endpoint 
+    // Delete assignment
     app.delete(
       "/assignments/:id",
       verifyToken,
@@ -230,6 +230,7 @@ async function run() {
           const submissionData = req.body;
           submissionData.submittedAt = new Date();
           submissionData.submittedBy = req.user.email;
+          submissionData.status = "Pending"
 
           const result = await submissionCollection.insertOne(submissionData);
           res.status(201).json({
