@@ -42,6 +42,20 @@ async function run() {
       .db("applicationportal")
       .collection("submissions");
 
+    // Ensure unique submissions per student per assignment
+    try {
+      await submissionCollection.createIndex(
+        { assignmentId: 1, submittedBy: 1 },
+        { unique: true, name: "uniq_assignment_per_student" }
+      );
+    } catch (indexError) {
+      console.warn(
+        "Warning: could not create unique index on submissions (assignmentId, submittedBy).",
+        indexError?.message || indexError
+      );
+      // Continue without crashing; API-level duplicate checks still apply
+    }
+
     //middleware
     const verifyToken = async (req, res, next) => {
       const token = req.cookies.accessToken;
@@ -176,7 +190,7 @@ async function run() {
       }
     );
 
-    // Update submission  
+    // Update submission
     app.patch(
       "/submissions/:id",
       verifyToken,
@@ -230,9 +244,37 @@ async function run() {
           const submissionData = req.body;
           submissionData.submittedAt = new Date();
           submissionData.submittedBy = req.user.email;
-          submissionData.status = "Pending"
+          submissionData.status = "Pending";
 
-          const result = await submissionCollection.insertOne(submissionData);
+          // prevent duplicate
+          if (!submissionData.assignmentId) {
+            return res
+              .status(400)
+              .json({ message: "assignmentId is required" });
+          }
+
+          const existing = await submissionCollection.findOne({
+            assignmentId: submissionData.assignmentId,
+            submittedBy: submissionData.submittedBy,
+          });
+          if (existing) {
+            return res.status(409).json({
+              message: "You have already submitted this assignment.",
+              submissionId: existing._id,
+            });
+          }
+
+          let result;
+          try {
+            result = await submissionCollection.insertOne(submissionData);
+          } catch (e) {
+            if (e?.code === 11000) {
+              return res.status(409).json({
+                message: "You have already submitted this assignment.",
+              });
+            }
+            throw e;
+          }
           res.status(201).json({
             message: "Submission created successfully",
             submissionId: result.insertedId,
@@ -269,7 +311,6 @@ async function run() {
       }
     });
 
-    
     app.get("/users/:email", verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
